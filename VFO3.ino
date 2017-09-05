@@ -20,9 +20,9 @@ enum Mode { VFO, VFO_OFFSET, BFO, BFO_OFFSET, CAL };
 const char* modeTitles[] = { "VFO", "VFO+", "BFO", "BFO+", "CAL" };
 Mode mode = VFO;
 
-const unsigned long stepMenu[] = { 500, 100, 50, 1000000, 100000, 10000, 1000 };
-const char* stepMenuTitles[] = { "500 Hz", "100 Hz", "50 Hz", "1 MHz", "100 kHz", "10 kHz", "1 kHz" };
-const uint8_t maxStepIndex = 6;
+const unsigned long stepMenu[] = { 500, 100, 10, 1, 1000000, 100000, 10000, 1000 };
+const char* stepMenuTitles[] = { "500 Hz", "100 Hz", "10 Hz", "1 Hz", "1 MHz", "100 kHz", "10 kHz", "1 kHz" };
+const uint8_t maxStepIndex = 7;
 uint8_t stepIndex = 0;
 
 DebouncedSwitch db2(3L);
@@ -186,8 +186,8 @@ void loop() {
     Utils::eepromWriteLong(4,vfoOffsetFreq);
     Utils::eepromWriteLong(8,bfoFreq);
     Utils::eepromWriteLong(12,bfoOffsetFreq);
-    Utils::eepromWriteLong(20,calFreq);
-    EEPROM.write(24,stepIndex);
+    Utils::eepromWriteLong(16,calFreq);
+    EEPROM.write(20,stepIndex);
   }
   else if (clickDuration > 750) {
     if (mode == VFO) {
