@@ -4,6 +4,8 @@
 
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
+// The Etherkit library
+#include <si5351.h>
 #include <DebouncedSwitch.h>
 #include <RotaryEncoder.h>
 #include <ClickDetector.h>
@@ -12,12 +14,14 @@
 #define OLED_RESET 4
 Adafruit_SSD1306 display(OLED_RESET);
 
+Si5351 si5351;
+
 #define PIN_D2 2
 #define PIN_D3 3
 #define PIN_D4 4
 
-enum Mode { VFO, VFO_OFFSET, BFO, BFO_OFFSET, CAL };
-const char* modeTitles[] = { "VFO", "VFO+", "BFO", "BFO+", "CAL" };
+enum Mode { VFO, VFO_OFFSET, BFO, CAL };
+const char* modeTitles[] = { "VFO", "VFO+", "BFO", "CAL" };
 Mode mode = VFO;
 
 const unsigned long stepMenu[] = { 500, 100, 10, 1, 1000000, 100000, 10000, 1000 };
@@ -34,7 +38,6 @@ ClickDetector cd4(&db4);
 unsigned long vfoFreq = 7000000;
 long vfoOffsetFreq = 5000000;
 unsigned long bfoFreq = 12000000;
-long bfoOffsetFreq = 0;
 long calFreq = 0;
 
 unsigned long getMH(unsigned long f) {
@@ -80,9 +83,6 @@ void updateDisplay() {
     neg = (vfoOffsetFreq < 0);
   } else if (mode == BFO) {
     f = bfoFreq;
-  } else if (mode == BFO_OFFSET) {
-    f = abs(bfoOffsetFreq);
-    neg = (bfoOffsetFreq < 0);
   } else if (mode == CAL) {
     f = abs(calFreq);
     neg = (calFreq < 0);
@@ -114,11 +114,24 @@ void updateDisplay() {
   display.print(stepMenuTitles[stepIndex]);
 }
 
+/**
+ * Called to load frequencies into the Si5351
+ */
+void updateVFOFreq() {
+  long f = vfoFreq + vfoOffsetFreq + calFreq;
+  si5351.set_freq((unsigned long long)f * 100ULL,SI5351_CLK0);
+}
+
+void updateBFOFreq() {
+  long f = bfoFreq + calFreq;
+  si5351.set_freq((unsigned long long)f * 100ULL,SI5351_CLK2);
+}
+
 void setup() {
   
   Serial.begin(9600);
   delay(500);
-  Serial.println("KC1FSZ VFO3");
+  //Serial.println("KC1FSZ VFO3");
 
   pinMode(PIN_D2,INPUT_PULLUP);
   pinMode(PIN_D3,INPUT_PULLUP);
@@ -126,6 +139,26 @@ void setup() {
 
   display.begin(SSD1306_SWITCHCAPVCC,SSD1306_I2C_ADDRESS);
 
+  // Si5351 initialization
+  si5351.init(SI5351_CRYSTAL_LOAD_8PF,0,0);
+
+  /*
+  // TEMP
+  si5351.update_status();
+  delay(500);
+  si5351.update_status();
+  delay(500);
+  Serial.print("SYS_INIT: ");
+  Serial.print(si5351.dev_status.SYS_INIT);
+  Serial.print("  LOL_A: ");
+  Serial.print(si5351.dev_status.LOL_A);
+  Serial.print("  LOL_B: ");
+  Serial.print(si5351.dev_status.LOL_B);
+  Serial.print("  LOS: ");
+  Serial.print(si5351.dev_status.LOS);
+  Serial.print("  REVID: ");
+  Serial.println(si5351.dev_status.REVID);
+  */
   display.clearDisplay();
 
   display.setTextSize(0);
@@ -137,12 +170,15 @@ void setup() {
   vfoFreq = Utils::eepromReadLong(0);
   vfoOffsetFreq = Utils::eepromReadLong(4);
   bfoFreq = Utils::eepromReadLong(8);
-  bfoOffsetFreq = Utils::eepromReadLong(12);
   calFreq = Utils::eepromReadLong(16);
   stepIndex = EEPROM.read(20);
   if (stepIndex > maxStepIndex) {
     stepIndex = 0;
   }
+
+  // Initial update of Si5351
+  updateVFOFreq();
+  updateBFOFreq();
 
   // Initial display render
   updateDisplay();
@@ -167,14 +203,17 @@ void loop() {
     long step = mult * stepMenu[stepIndex];
     if (mode == VFO) {
       vfoFreq += step;
+      updateVFOFreq();
     } else if (mode == VFO_OFFSET) {
       vfoOffsetFreq += step;
+      updateVFOFreq();
     } else if (mode == BFO) {
       bfoFreq += step;
-    } else if (mode == BFO_OFFSET) {
-      bfoOffsetFreq += step;
+      updateBFOFreq();
     } else if (mode == CAL) {
       calFreq += step;
+      updateVFOFreq();
+      updateBFOFreq();
     }
 
     displayDirty = true;
@@ -185,7 +224,6 @@ void loop() {
     Utils::eepromWriteLong(0,vfoFreq);
     Utils::eepromWriteLong(4,vfoOffsetFreq);
     Utils::eepromWriteLong(8,bfoFreq);
-    Utils::eepromWriteLong(12,bfoOffsetFreq);
     Utils::eepromWriteLong(16,calFreq);
     EEPROM.write(20,stepIndex);
   }
@@ -195,8 +233,6 @@ void loop() {
     } else if (mode == VFO_OFFSET) {
       mode = BFO;
     } else if (mode == BFO) {
-      mode = BFO_OFFSET;
-    } else if (mode == BFO_OFFSET) {
       mode = CAL;
     } else {
       mode = VFO;
