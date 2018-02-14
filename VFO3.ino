@@ -36,9 +36,9 @@ RotaryEncoder renc(&db2,&db3);
 ClickDetector cd4(&db4);
 
 unsigned long vfoFreq = 7000000;
-long vfoOffsetFreq = 5000000;
-unsigned long bfoFreq = 12000000;
-long calFreq = 0;
+long vfoOffsetFreq = 11998000;
+unsigned long bfoFreq = 11998000;
+long calPpm = 0;
 
 unsigned long getMH(unsigned long f) {
   return f / 1000000L;
@@ -79,13 +79,12 @@ void updateDisplay() {
   if (mode == VFO) {
     f = vfoFreq;
   } else if (mode == VFO_OFFSET) {
-    f = abs(vfoOffsetFreq);
-    neg = (vfoOffsetFreq < 0);
+    f = vfoOffsetFreq;
   } else if (mode == BFO) {
     f = bfoFreq;
   } else if (mode == CAL) {
-    f = abs(calFreq);
-    neg = (calFreq < 0);
+    f = abs(calPpm);
+    neg = (calPpm < 0);
   }
 
   // Sign
@@ -118,20 +117,23 @@ void updateDisplay() {
  * Called to load frequencies into the Si5351
  */
 void updateVFOFreq() {
-  long f = vfoFreq + vfoOffsetFreq + calFreq;
+  long f = vfoOffsetFreq - vfoFreq;
   si5351.set_freq((unsigned long long)f * 100ULL,SI5351_CLK0);
 }
 
 void updateBFOFreq() {
-  long f = bfoFreq + calFreq;
+  long f = bfoFreq;
   si5351.set_freq((unsigned long long)f * 100ULL,SI5351_CLK2);
+}
+
+void updateCal() {
+  si5351.set_correction(calPpm,SI5351_PLL_INPUT_XO);
 }
 
 void setup() {
   
   Serial.begin(9600);
   delay(500);
-  //Serial.println("KC1FSZ VFO3");
 
   pinMode(PIN_D2,INPUT_PULLUP);
   pinMode(PIN_D3,INPUT_PULLUP);
@@ -141,7 +143,10 @@ void setup() {
 
   // Si5351 initialization
   si5351.init(SI5351_CRYSTAL_LOAD_8PF,0,0);
-
+  // Boost up drive strength
+  si5351.drive_strength(SI5351_CLK0, SI5351_DRIVE_2MA);
+  si5351.drive_strength(SI5351_CLK2, SI5351_DRIVE_2MA);
+ 
   /*
   // TEMP
   si5351.update_status();
@@ -167,11 +172,13 @@ void setup() {
   display.drawLine(0,15,display.width(),15,WHITE);
 
   // Pull values from EEPROM
+  
   vfoFreq = Utils::eepromReadLong(0);
   vfoOffsetFreq = Utils::eepromReadLong(4);
   bfoFreq = Utils::eepromReadLong(8);
-  calFreq = Utils::eepromReadLong(16);
+  calPpm = Utils::eepromReadLong(16);
   stepIndex = EEPROM.read(20);
+  
   if (stepIndex > maxStepIndex) {
     stepIndex = 0;
   }
@@ -179,6 +186,7 @@ void setup() {
   // Initial update of Si5351
   updateVFOFreq();
   updateBFOFreq();
+  updateCal();
 
   // Initial display render
   updateDisplay();
@@ -211,9 +219,8 @@ void loop() {
       bfoFreq += step;
       updateBFOFreq();
     } else if (mode == CAL) {
-      calFreq += step;
-      updateVFOFreq();
-      updateBFOFreq();
+      calPpm += step;
+      updateCal();
     }
 
     displayDirty = true;
@@ -224,7 +231,7 @@ void loop() {
     Utils::eepromWriteLong(0,vfoFreq);
     Utils::eepromWriteLong(4,vfoOffsetFreq);
     Utils::eepromWriteLong(8,bfoFreq);
-    Utils::eepromWriteLong(16,calFreq);
+    Utils::eepromWriteLong(16,calPpm);
     EEPROM.write(20,stepIndex);
   }
   else if (clickDuration > 750) {
