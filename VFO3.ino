@@ -38,7 +38,7 @@ const unsigned long maxDisplayFreq = 7300000L;
 DebouncedSwitch db2(1L);
 DebouncedSwitch db3(1L);
 DebouncedSwitch db4(1L);
-DebouncedSwitch commandButton1(10L);
+DebouncedSwitch commandButton1(5L);
 RotaryEncoder renc(&db2,&db3);
 ClickDetector cd4(&db4);
 
@@ -54,9 +54,9 @@ uint8_t bfoPower = 0;
 // This controls the mode: 0 means not scanning, +1 means scan up, -1 means scan down
 int scanMode = 0;
 // This is the last time we made a scan jump
-long lastScanStamp = 0;
+unsigned long lastScanStamp = 0;
 // This controls how fast we scan
-long scanDelayMs = 150;
+unsigned long scanDelayMs = 150;
 
 unsigned long getMH(unsigned long f) {
   return f / 1000000L;
@@ -301,8 +301,6 @@ void loop() {
     if (mode == VFO) {     
       if (scanMode == 0)
         scanMode = 1;
-      else 
-        scanMode = 0;
     }
   }
 
