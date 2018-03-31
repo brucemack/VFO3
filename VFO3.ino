@@ -6,7 +6,8 @@
 #include <Adafruit_SSD1306.h>
 // The Etherkit library
 #include <si5351.h>
-#include <DebouncedSwitch.h>
+// Utilities used to manage switches, ecoders, etc.
+#include <DebouncedSwitch2.h>
 #include <RotaryEncoder.h>
 #include <ClickDetector.h>
 #include <Utils.h>
@@ -35,11 +36,11 @@ const uint8_t maxStepIndex = 7;
 const unsigned long minDisplayFreq = 7125000L;
 const unsigned long maxDisplayFreq = 7300000L;
 
-DebouncedSwitch db2(1L);
-DebouncedSwitch db3(1L);
-DebouncedSwitch db4(1L);
-DebouncedSwitch commandButton1(5L);
-RotaryEncoder renc(&db2,&db3);
+DebouncedSwitch2 db2(5L);
+DebouncedSwitch2 db3(5L);
+DebouncedSwitch2 db4(10L);
+DebouncedSwitch2 commandButton1(10L);
+RotaryEncoder renc(&db2,&db3,100L);
 ClickDetector cd4(&db4);
 
 unsigned long vfoFreq = 7000000;
@@ -52,7 +53,7 @@ uint8_t bfoPower = 0;
 
 // Scanning related.
 // This controls the mode: 0 means not scanning, +1 means scan up, -1 means scan down
-int scanMode = 0;
+bool scanMode = false;
 // This is the last time we made a scan jump
 unsigned long lastScanStamp = 0;
 // This controls how fast we scan
@@ -216,6 +217,8 @@ void setup() {
   display.display();
 }
 
+int count = 0;
+
 void loop() {
     
   int c2 = digitalRead(PIN_D2);
@@ -233,8 +236,9 @@ void loop() {
 
   // Look for dial turning
   if (mult != 0) {
+    Serial.println(mult);
     // Immediately stop scanning
-    scanMode = 0;
+    scanMode = false;
     // Handle dial
     long step = mult * stepMenu[stepIndex];
     if (mode == VFO) {
@@ -291,24 +295,22 @@ void loop() {
       mode = VFO;
     } 
     displayDirty = true;
-  } 
-  else if (clickDuration > 0) {
+  } else if (clickDuration > 0) {
     if (++stepIndex > maxStepIndex) {
       stepIndex = 0;
     } 
     displayDirty = true;
-  } else if (commandButton1.getState()) {
-    if (mode == VFO) {     
-      if (scanMode == 0)
-        scanMode = 1;
+  } else if (commandButton1.getState() && commandButton1.isEdge()) {
+    if (mode == VFO) {
+      scanMode = !scanMode;     
     }
   }
 
-// Handle scanning.  If we are in VFO mode and scanning is enabled and the scan interval
+  // Handle scanning.  If we are in VFO mode and scanning is enabled and the scan interval
   // has expired then step the VFO frequency.
   //  
-  if (mode == VFO &&
-      scanMode != 0 && 
+  if (mode == VFO && 
+      scanMode && 
       millis() > (lastScanStamp + scanDelayMs)) {
     // Record the time so that we can start another cycle
     lastScanStamp = millis();
